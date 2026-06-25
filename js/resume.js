@@ -49,6 +49,35 @@ const ResumeController = {
         // Diff version selectors change
         document.getElementById('diff-ver-a').addEventListener('change', () => this.renderDiffView());
         document.getElementById('diff-ver-b').addEventListener('change', () => this.renderDiffView());
+
+        // File upload trigger and change handler
+        const fileUploadInput = document.getElementById('resume-file-upload');
+        const triggerUploadBtn = document.getElementById('trigger-upload-btn');
+
+        if (triggerUploadBtn && fileUploadInput) {
+            triggerUploadBtn.addEventListener('click', () => fileUploadInput.click());
+            fileUploadInput.addEventListener('change', (e) => this.handleFileUpload(e));
+        }
+    },
+
+    handleFileUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target.result;
+            const editor = document.getElementById('resume-markdown-editor');
+            const commitMsgInput = document.getElementById('resume-commit-message');
+
+            editor.value = content;
+            this.updatePreview(content);
+            commitMsgInput.value = `Uploaded: ${file.name}`;
+            
+            // Reset the file input so the same file can be uploaded again if needed
+            e.target.value = '';
+        };
+        reader.readAsText(file);
     },
 
     populateVersionSelects(resumes) {
