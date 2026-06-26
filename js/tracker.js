@@ -426,9 +426,18 @@ const TrackerController = {
             }
         }
 
+        // Heuristic B: Search for "The [Role] is responsible for..." or "The [Role] is an..." inside the text, restricted to single line matching (no \n)
+        if (!result.role) {
+            const roleIsRegex = /(?:^|\b)(?:The|A|An)\s+([A-Z][a-zA-Z0-9 \t\-\/\+]{2,45}\s+(?:Developer|Engineer|Analyst|Manager|Lead|Architect|Designer|Intern|Programmer|Specialist|Consultant|SDE))\s+(?:is|will)\b/i;
+            const match = text.match(roleIsRegex);
+            if (match && match[1]) {
+                result.role = match[1].trim();
+            }
+        }
+
         // Fallback: If no single-line title was found, scan the whole text for "for/as/hiring a [Role]" patterns inside paragraphs
         if (!result.role) {
-            const roleInTextRegex = /(?:for|as|hiring|seeking|looking\s+for)\s+(?:a|an)?\s*([A-Z][a-zA-Z0-9\s\/\#\-\+]{2,35}\s+(?:Developer|Engineer|Analyst|Manager|Lead|Architect|Designer|Intern|SDE|Programmer|Specialist|Consultant|SDE\s*[I|II|III]?))\b/i;
+            const roleInTextRegex = /(?:for|as|hiring|seeking|looking\s+for)\s+(?:a|an)?\s*([A-Z][a-zA-Z0-9 \t\/\#\-\+]{2,35}\s+(?:Developer|Engineer|Analyst|Manager|Lead|Architect|Designer|Intern|SDE|Programmer|Specialist|Consultant|SDE\s*[I|II|III]?))\b/i;
             const textMatch = text.match(roleInTextRegex);
             if (textMatch && textMatch[1]) {
                 result.role = textMatch[1].trim();
@@ -515,7 +524,7 @@ const TrackerController = {
                         const nextLine = lines[i + offset];
                         if (nextLine && nextLine.length < 45 && !nextLine.includes(':') && !/remote|hybrid|onsite/i.test(nextLine)) {
                             if (/^[A-Z]/.test(nextLine)) {
-                                result.company = nextLine.replace(/\s+is\s+a\b.*/i, '').trim(); // Strip "is a..." suffix
+                                result.company = nextLine.replace(/\s+is\s+(?:a|an|the|prominent|leading|global)\b.*/i, '').trim(); // Strip "is a..." suffix
                                 break;
                             }
                         }
@@ -542,6 +551,31 @@ const TrackerController = {
             const parts = lines[0].split(' - ');
             if (parts[0] && parts[0].length < 30) {
                 result.company = parts[0].trim();
+            }
+        }
+
+        // Heuristic G: Look for EEO / Equal Opportunity Employer statements near the bottom
+        if (!result.company) {
+            // e.g. "Citi is an equal opportunity employer..." or "Google is an Equal Opportunity/Affirmative Action..."
+            const eeoRegex = /^([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})\s+is\s+an?\s+(?:equal\s+opportunity|EEO)\b/i;
+            for (let i = 0; i < lines.length; i++) {
+                const match = lines[i].match(eeoRegex);
+                if (match && match[1]) {
+                    result.company = match[1].trim();
+                    break;
+                }
+            }
+        }
+
+        // Heuristic H: Look for "Accessibility at [Company]" or "[Company]'s EEO Policy"
+        if (!result.company) {
+            const accessRegex = /\bAccessibility\s+at\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,25})\b/i;
+            for (let i = 0; i < lines.length; i++) {
+                const match = lines[i].match(accessRegex);
+                if (match && match[1]) {
+                    result.company = match[1].trim();
+                    break;
+                }
             }
         }
 
