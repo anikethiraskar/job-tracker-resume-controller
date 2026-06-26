@@ -392,6 +392,62 @@ const TrackerController = {
         const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const result = {};
 
+        // Helper to validate company name extractions and filter out generic/garbage matches
+        const isValidCompanyName = (name) => {
+            if (!name) return false;
+            const clean = name.trim().toLowerCase();
+            
+            // Blacklisted words and common phrases
+            const blacklist = [
+                'this', 'we', 'our', 'you', 'it', 'who', 'what', 'which', 'as', 'he', 'she', 'they', 'i',
+                'the role', 'the candidate', 'the ideal candidate', 'the position',
+                'the employer', 'the company', 'the team', 'ideal candidate', 'successful candidate',
+                'qualified candidate', 'the applicant', 'the individual', 'this position',
+                'this role', 'this job', 'the job', 'candidate', 'employer', 'position', 'role',
+                'applicant', 'individual', 'team', 'person'
+            ];
+            
+            if (blacklist.includes(clean)) return false;
+            if (clean.length < 2) return false;
+
+            // Must not consist only of common pronouns, verbs, or demonstratives
+            const pronounsAndVerbs = /^(?:the|this|that|these|those|we|our|you|your|he|she|they|it|an?|is|are|was|were|be|been|have|has|had|do|does|did|will|would|shall|should|can|could|may|might|must)\b/i;
+            if (pronounsAndVerbs.test(clean) && !/\s/.test(clean)) {
+                return false;
+            }
+            
+            // Must not start with common non-company nouns/phrases
+            const invalidStartRegex = /^(?:the\s+(?:role|candidate|ideal|position|employer|company|team|applicant|individual|job|person))\b/i;
+            if (invalidStartRegex.test(clean)) return false;
+
+            // Must not contain role keywords (prevents matching "The Java Developer is a...")
+            const roleKeywords = ['developer', 'engineer', 'analyst', 'programmer', 'manager', 'lead', 'architect', 'designer', 'intern', 'specialist', 'consultant', 'coder'];
+            if (roleKeywords.some(kw => clean.includes(kw))) {
+                return false;
+            }
+
+            return true;
+        };
+
+        // Helper to validate role name extractions and filter out full sentences
+        const isValidRoleName = (name) => {
+            if (!name) return false;
+            const clean = name.trim().toLowerCase();
+            
+            // Must not contain full-sentence structures
+            if (/\b(?:is\s+an?|is\s+responsible|will\s+be|role\s+for|position\s+for|looking\s+for|hiring\s+for|we\s+are|this\s+is)\b/i.test(clean)) {
+                return false;
+            }
+            
+            // Must not start with common non-role pronouns/verbs
+            const invalidStart = /^(?:this|we|our|you|it|who|what|which|as|the\s+ideal|the\s+successful)\b/i;
+            if (invalidStart.test(clean)) return false;
+
+            if (clean.length < 3) return false;
+
+            return true;
+        };
+
         // Helper to clean common label prefixes
         const cleanPrefix = (str, prefixes) => {
             let cleaned = str;
@@ -405,6 +461,25 @@ const TrackerController = {
         const rolePrefixes = ['job title', 'role', 'position', 'title'];
         const companyPrefixes = ['company', 'organization', 'employer', 'company name'];
 
+        // Helper to assign role if valid
+        const trySetRole = (name, index) => {
+            if (isValidRoleName(name)) {
+                result.role = name;
+                titleIndex = index;
+                return true;
+            }
+            return false;
+        };
+
+        // Helper to assign company if valid
+        const trySetCompany = (name) => {
+            if (isValidCompanyName(name)) {
+                result.company = name;
+                return true;
+            }
+            return false;
+        };
+
         // 1. Role Title Heuristics (scan first 15 lines)
         const titleKeywords = ['developer', 'engineer', 'analyst', 'manager', 'lead', 'architect', 'designer', 'intern', 'sde', 'programmer', 'specialist', 'consultant', 'coder'];
         let titleIndex = -1;
@@ -414,15 +489,12 @@ const TrackerController = {
             // If the line explicitly starts with a prefix like "Job Title: ..."
             const cleaned = cleanPrefix(line, rolePrefixes);
             if (cleaned !== line && cleaned.length < 50) {
-                result.role = cleaned;
-                titleIndex = i;
-                break;
+                if (trySetRole(cleaned, i)) break;
             }
 
             if (titleKeywords.some(kw => line.toLowerCase().includes(kw)) && line.length < 50) {
-                result.role = cleanPrefix(line, rolePrefixes);
-                titleIndex = i;
-                break;
+                const candidate = cleanPrefix(line, rolePrefixes);
+                if (trySetRole(candidate, i)) break;
             }
         }
 
@@ -431,7 +503,7 @@ const TrackerController = {
             const roleIsRegex = /(?:^|\b)(?:The|A|An)\s+([A-Z][a-zA-Z0-9 \t\-\/\+]{2,45}\s+(?:Developer|Engineer|Analyst|Manager|Lead|Architect|Designer|Intern|Programmer|Specialist|Consultant|SDE))\s+(?:is|will)\b/i;
             const match = text.match(roleIsRegex);
             if (match && match[1]) {
-                result.role = match[1].trim();
+                trySetRole(match[1].trim(), -1);
             }
         }
 
@@ -440,7 +512,7 @@ const TrackerController = {
             const roleInTextRegex = /(?:for|as|hiring|seeking|looking\s+for)\s+(?:a|an)?\s*([A-Z][a-zA-Z0-9 \t\/\#\-\+]{2,35}\s+(?:Developer|Engineer|Analyst|Manager|Lead|Architect|Designer|Intern|SDE|Programmer|Specialist|Consultant|SDE\s*[I|II|III]?))\b/i;
             const textMatch = text.match(roleInTextRegex);
             if (textMatch && textMatch[1]) {
-                result.role = textMatch[1].trim();
+                trySetRole(textMatch[1].trim(), -1);
             }
         }
 
@@ -450,8 +522,7 @@ const TrackerController = {
             const line = lines[i];
             const cleaned = cleanPrefix(line, companyPrefixes);
             if (cleaned !== line && cleaned.length < 35) {
-                result.company = cleaned;
-                break;
+                if (trySetCompany(cleaned)) break;
             }
         }
 
@@ -467,8 +538,7 @@ const TrackerController = {
                 for (let regex of companyRegexes) {
                     const match = line.match(regex);
                     if (match && match[1]) {
-                        result.company = match[1].trim();
-                        break;
+                        if (trySetCompany(match[1].trim())) break;
                     }
                 }
                 if (result.company) break;
@@ -490,9 +560,8 @@ const TrackerController = {
                 if (/[·•\-\–\|]/.test(cand)) {
                     const parts = cand.split(/[·•\-\–\|]/);
                     const compPart = parts[0].trim();
-                    if (compPart.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time/i.test(compPart)) {
-                        result.company = compPart;
-                        break;
+                    if (compPart.length < 35) {
+                        if (trySetCompany(compPart)) break;
                     }
                 }
                 
@@ -500,16 +569,14 @@ const TrackerController = {
                 if (cand.includes(',')) {
                     const parts = cand.split(',');
                     const compPart = parts[0].trim();
-                    if (compPart.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time/i.test(compPart)) {
-                        result.company = compPart;
-                        break;
+                    if (compPart.length < 35) {
+                        if (trySetCompany(compPart)) break;
                     }
                 }
 
                 // Normal check for single company name lines
-                if (cand.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time|\d+/i.test(cand)) {
-                    result.company = cand;
-                    break;
+                if (cand.length < 35) {
+                    if (trySetCompany(cand)) break;
                 }
             }
         }
@@ -524,8 +591,8 @@ const TrackerController = {
                         const nextLine = lines[i + offset];
                         if (nextLine && nextLine.length < 45 && !nextLine.includes(':') && !/remote|hybrid|onsite/i.test(nextLine)) {
                             if (/^[A-Z]/.test(nextLine)) {
-                                result.company = nextLine.replace(/\s+is\s+(?:a|an|the|prominent|leading|global)\b.*/i, '').trim(); // Strip "is a..." suffix
-                                break;
+                                const candidate = nextLine.replace(/\s+is\s+(?:a|an|the|prominent|leading|global)\b.*/i, '').trim(); // Strip "is a..." suffix
+                                if (trySetCompany(candidate)) break;
                             }
                         }
                     }
@@ -540,8 +607,7 @@ const TrackerController = {
             for (let i = 0; i < Math.min(lines.length, 10); i++) {
                 const match = lines[i].match(isARegex);
                 if (match && match[1]) {
-                    result.company = match[1].trim();
-                    break;
+                    if (trySetCompany(match[1].trim())) break;
                 }
             }
         }
@@ -550,7 +616,7 @@ const TrackerController = {
         if (!result.company && lines[0] && lines[0].includes(' - ')) {
             const parts = lines[0].split(' - ');
             if (parts[0] && parts[0].length < 30) {
-                result.company = parts[0].trim();
+                trySetCompany(parts[0].trim());
             }
         }
 
@@ -561,8 +627,7 @@ const TrackerController = {
             for (let i = 0; i < lines.length; i++) {
                 const match = lines[i].match(eeoRegex);
                 if (match && match[1]) {
-                    result.company = match[1].trim();
-                    break;
+                    if (trySetCompany(match[1].trim())) break;
                 }
             }
         }
@@ -573,8 +638,7 @@ const TrackerController = {
             for (let i = 0; i < lines.length; i++) {
                 const match = lines[i].match(accessRegex);
                 if (match && match[1]) {
-                    result.company = match[1].trim();
-                    break;
+                    if (trySetCompany(match[1].trim())) break;
                 }
             }
         }
