@@ -549,7 +549,7 @@ const TrackerController = {
         const salaryRegex = /(?:[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?\s*[\-\–]\s*[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?|[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?\s*\/yr|[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?\s*annually)/gi;
         
         // Support general Lakhs Per Annum (LPA) or Rupees ranges: e.g. "3,00,000 - 5,00,000" or "6 - 12 LPA"
-        const genericRangeRegex = /(\b\d{1,3}(?:\,\d{2,3})*(?:\s*k)?\s*[\-\–]\s*\d{1,3}(?:\,\d{2,3})*(?:\s*k)?\s*(?:INR|USD|Rs\.?|rupees|lpa|lakhs|annum|per year|/yr)\b)/i;
+        const genericRangeRegex = /(\b\d{1,3}(?:\,\d{2,3})*(?:\s*k)?\s*[\-\–]\s*\d{1,3}(?:\,\d{2,3})*(?:\s*k)?\s*(?:INR|USD|Rs\.?|rupees|lpa|lakhs|annum|per year|\/yr)\b)/i;
 
         const fullText = text.replace(/\n/g, ' ');
         let match = fullText.match(salaryRegex);
