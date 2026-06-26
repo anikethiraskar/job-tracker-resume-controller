@@ -241,11 +241,15 @@
             <section id="panel-resume" class="content-panel">
                 <div class="resume-container">
                     <div class="tracker-controls" style="margin-bottom:0">
-                        <div class="version-selectors">
+                        <div class="version-selectors" style="display:flex; gap:0.5rem; align-items:center">
                             <span style="font-weight:600; color:var(--text-secondary); margin-right:0.5rem">Active Version:</span>
                             <select id="resume-version-select" class="select-filter" style="min-width:180px">
                                 <!-- Loaded dynamically -->
                             </select>
+                            <button id="delete-resume-version-btn" class="btn btn-danger" style="padding:0.5rem 0.8rem; font-size:0.85rem; border-radius:12px" title="Delete Active Version">
+                                <svg viewBox="0 0 24 24" style="width:14px; height:14px; stroke: currentColor; fill: none;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                <span>Delete Version</span>
+                            </button>
                         </div>
                         <div style="display:flex; gap:1rem">
                             <button id="compare-versions-btn" class="btn btn-secondary">

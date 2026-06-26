@@ -1193,6 +1193,7 @@ textarea.form-input {
         visibility: visible;
     }
     #resume-print-content {
+        display: block !important;
         position: absolute;
         left: 0;
         top: 0;

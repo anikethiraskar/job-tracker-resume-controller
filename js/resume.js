@@ -39,6 +39,12 @@ const ResumeController = {
         // Print/Download PDF
         document.getElementById('export-pdf-btn').addEventListener('click', () => this.handleDownloadPDF());
 
+        // Delete active version
+        const deleteBtn = document.getElementById('delete-resume-version-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => this.handleDeleteVersion());
+        }
+
         // Diff modal events
         document.getElementById('compare-versions-btn').addEventListener('click', () => this.openDiffModal());
         document.getElementById('diff-modal-close').addEventListener('click', () => this.closeDiffModal());
@@ -313,6 +319,39 @@ const ResumeController = {
 
         // Execute print command
         window.print();
+    },
+
+    handleDeleteVersion() {
+        const select = document.getElementById('resume-version-select');
+        const activeId = select.value;
+        if (!activeId) return;
+
+        const resumes = window.StorageManager.getResumes();
+        if (resumes.length <= 1) {
+            alert("You must keep at least one resume version!");
+            return;
+        }
+
+        const selected = resumes.find(r => r.id === activeId);
+        if (!selected) return;
+
+        if (confirm(`Are you sure you want to delete version ${selected.version}? This action cannot be undone.`)) {
+            const filtered = resumes.filter(r => r.id !== activeId);
+            window.StorageManager.saveResumes(filtered);
+
+            this.populateVersionSelects(filtered);
+
+            const latest = filtered[filtered.length - 1];
+            select.value = latest.id;
+            this.loadResumeVersion(latest);
+
+            if (window.TrackerController) {
+                window.TrackerController.populateResumeDropdowns(filtered);
+                window.TrackerController.populateResumeFilter(filtered);
+            }
+
+            alert(`Deleted version ${selected.version} successfully.`);
+        }
     },
 
     // Revision Diff Viewer (LCS algorithm)
