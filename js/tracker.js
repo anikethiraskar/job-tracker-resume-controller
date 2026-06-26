@@ -426,6 +426,15 @@ const TrackerController = {
             }
         }
 
+        // Fallback: If no single-line title was found, scan the whole text for "for/as/hiring a [Role]" patterns inside paragraphs
+        if (!result.role) {
+            const roleInTextRegex = /(?:for|as|hiring|seeking|looking\s+for)\s+(?:a|an)?\s*([A-Z][a-zA-Z0-9\s\/\#\-\+]{2,35}\s+(?:Developer|Engineer|Analyst|Manager|Lead|Architect|Designer|Intern|SDE|Programmer|Specialist|Consultant|SDE\s*[I|II|III]?))\b/i;
+            const textMatch = text.match(roleInTextRegex);
+            if (textMatch && textMatch[1]) {
+                result.role = textMatch[1].trim();
+            }
+        }
+
         // 2. Company Name Heuristics
         // Heuristic A: Look for explicit prefixes like "Company: Google"
         for (let i = 0; i < Math.min(lines.length, 12); i++) {
