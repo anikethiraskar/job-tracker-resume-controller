@@ -823,6 +823,13 @@ body {
     stroke-width: 2;
 }
 
+#job-form {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
 .drawer-body {
     padding: 2rem;
     overflow-y: auto;
