@@ -80,13 +80,23 @@ const ResumeController = {
         editor.value = "Parsing file, please wait...";
         this.updatePreview("### Parsing file, please wait...");
 
-        if (fileExtension === 'md' || fileExtension === 'txt') {
+        if (fileExtension === 'md') {
             const reader = new FileReader();
             reader.onload = (event) => {
                 const content = event.target.result;
                 editor.value = content;
                 this.updatePreview(content);
-                commitMsgInput.value = `Uploaded: ${fileName}`;
+                commitMsgInput.value = `Uploaded MD: ${fileName}`;
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        } else if (fileExtension === 'txt') {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const content = this.autoFormatExtractedText(event.target.result);
+                editor.value = content;
+                this.updatePreview(content);
+                commitMsgInput.value = `Uploaded Text: ${fileName}`;
                 e.target.value = '';
             };
             reader.readAsText(file);
@@ -96,7 +106,7 @@ const ResumeController = {
                 const arrayBuffer = event.target.result;
                 mammoth.convertToMarkdown({ arrayBuffer: arrayBuffer })
                     .then((result) => {
-                        const content = result.value;
+                        const content = this.autoFormatExtractedText(result.value);
                         editor.value = content;
                         this.updatePreview(content);
                         commitMsgInput.value = `Uploaded Word doc: ${fileName}`;
@@ -116,7 +126,8 @@ const ResumeController = {
             reader.onload = async (event) => {
                 const arrayBuffer = event.target.result;
                 try {
-                    const content = await this.extractTextFromPDF(arrayBuffer);
+                    const rawContent = await this.extractTextFromPDF(arrayBuffer);
+                    const content = this.autoFormatExtractedText(rawContent);
                     editor.value = content;
                     this.updatePreview(content);
                     commitMsgInput.value = `Uploaded PDF doc: ${fileName}`;
@@ -172,6 +183,72 @@ const ResumeController = {
         }
 
         return fullText.trim();
+    },
+
+    autoFormatExtractedText(text) {
+        if (!text) return '';
+        
+        const lines = text.split('\n');
+        const formattedLines = [];
+        
+        const sectionHeaders = [
+            'PROFESSIONAL SUMMARY', 'SUMMARY', 'TECHNICAL SKILLS', 'SKILLS', 
+            'PROFESSIONAL EXPERIENCE', 'EXPERIENCE', 'WORK EXPERIENCE',
+            'ACADEMIC & PERSONAL PROJECTS', 'PROJECTS', 'ACADEMIC PROJECTS',
+            'EDUCATION', 'CERTIFICATIONS & LEADERSHIP', 'CERTIFICATIONS', 
+            'LEADERSHIP', 'AWARDS', 'PUBLICATIONS'
+        ];
+
+        let nameFormatted = false;
+        let roleFormatted = false;
+
+        for (let idx = 0; idx < lines.length; idx++) {
+            let line = lines[idx].trim();
+            if (!line) {
+                formattedLines.push('');
+                continue;
+            }
+
+            // Remove excessive inline bullet symbols from OCR
+            if (line.startsWith('•') || line.startsWith('▪') || line.startsWith('●') || line.startsWith('o ') || line.startsWith('*')) {
+                const cleaned = line.replace(/^[•▪●*]|^(o\s+)/, '').trim();
+                line = `- ${cleaned}`;
+            }
+
+            // 1. Center & capitalize the name (first text line)
+            if (!nameFormatted) {
+                formattedLines.push(`# ${line.toUpperCase()}`);
+                nameFormatted = true;
+                continue;
+            }
+            
+            // 2. Subtitle formatting (second text line, if short)
+            if (!roleFormatted && line.length < 55 && !line.includes('|') && !line.includes('@')) {
+                formattedLines.push(`**${line}**`);
+                roleFormatted = true;
+                continue;
+            }
+
+            // 3. Section Header Detection
+            const upperLine = line.toUpperCase();
+            const isHeader = sectionHeaders.includes(upperLine) || 
+                             (line === upperLine && line.length < 40 && !line.includes('|') && !line.includes(':'));
+            if (isHeader) {
+                formattedLines.push(`## ${line}`);
+                continue;
+            }
+
+            // 4. Date Alignment shortcode [right]...[/right]
+            // Matches Month Year - Month Year or Year - Year
+            const dateRegex = /\s+((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+)?\d{4}\s*[\-–—]\s*(?:Present|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+)?\d{4}))$/i;
+            if (dateRegex.test(line)) {
+                line = line.replace(dateRegex, ' [right]$1[/right]');
+            }
+
+            formattedLines.push(line);
+        }
+
+        return formattedLines.join('\n');
     },
 
     populateVersionSelects(resumes) {
@@ -246,6 +323,9 @@ const ResumeController = {
 
         // 3. Links
         html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+        // 3.5. Right alignment shortcode
+        html = html.replace(/\[right\](.*?)\[\/right\]/g, '<span class="right-align-span">$1</span>');
 
         // 4. Bullet lists: Match lines starting with - or * and group them
         // Let's replace each bullet line first with <li>item</li>
