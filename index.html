@@ -331,6 +331,17 @@
             <div class="drawer-body">
                 <input type="hidden" id="job-form-id">
                 
+                <!-- Smart Paste Auto-Filler -->
+                <div class="form-group" style="background: rgba(99, 102, 241, 0.05); padding: 1rem; border-radius: 12px; border: 1px dashed rgba(99, 102, 241, 0.3); margin-bottom: 1.25rem;">
+                    <label for="job-form-paste-area" style="color: var(--accent-secondary); display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                        Smart Paste Auto-Filler
+                    </label>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; display: block;">Paste copied job description text here to automatically extract company, role, and salary:</span>
+                    <textarea id="job-form-paste-area" class="form-input" style="height: 60px; min-height: 60px; font-size: 0.85rem;" placeholder="Paste job text here..."></textarea>
+                    <div id="paste-success-msg" style="font-size: 0.75rem; color: var(--color-offer); display: none; margin-top: 0.25rem; font-weight: 500;">✓ Successfully extracted details! Check fields below.</div>
+                </div>
+                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="job-form-company">Company *</label>

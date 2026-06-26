@@ -38,6 +38,12 @@ const TrackerController = {
         // Form submit & delete events
         document.getElementById('job-form').addEventListener('submit', (e) => this.handleFormSubmit(e));
         document.getElementById('job-form-delete-btn').addEventListener('click', () => this.handleDeleteJob());
+
+        // Smart Paste input listener
+        const pasteArea = document.getElementById('job-form-paste-area');
+        if (pasteArea) {
+            pasteArea.addEventListener('input', (e) => this.handleSmartPaste(e));
+        }
     },
 
     populateResumeDropdowns(resumes) {
@@ -257,6 +263,15 @@ const TrackerController = {
 
         form.reset();
 
+        const pasteArea = document.getElementById('job-form-paste-area');
+        if (pasteArea) {
+            pasteArea.value = '';
+        }
+        const successMsg = document.getElementById('paste-success-msg');
+        if (successMsg) {
+            successMsg.style.display = 'none';
+        }
+
         if (job) {
             // Edit application
             titleEl.textContent = 'Edit Job Application';
@@ -335,6 +350,90 @@ const TrackerController = {
                 }
             }
         }
+    },
+
+    handleSmartPaste(e) {
+        const text = e.target.value.trim();
+        if (!text) return;
+
+        const details = this.parseJobDescriptionText(text);
+        let success = false;
+        
+        if (details.company) {
+            document.getElementById('job-form-company').value = details.company;
+            success = true;
+        }
+        if (details.role) {
+            document.getElementById('job-form-role').value = details.role;
+            success = true;
+        }
+        if (details.salary) {
+            document.getElementById('job-form-salary').value = details.salary;
+            success = true;
+        }
+        
+        const notesInput = document.getElementById('job-form-notes');
+        if (notesInput && !notesInput.value) {
+            notesInput.value = text;
+        }
+
+        const successMsg = document.getElementById('paste-success-msg');
+        if (successMsg && success) {
+            successMsg.style.display = 'block';
+            setTimeout(() => {
+                successMsg.style.display = 'none';
+            }, 6000);
+        }
+    },
+
+    parseJobDescriptionText(text) {
+        if (!text) return {};
+        
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const result = {};
+
+        // 1. Role Title Heuristics
+        const titleKeywords = ['developer', 'engineer', 'analyst', 'manager', 'lead', 'architect', 'designer', 'intern', 'sde', 'programmer', 'specialist', 'consultant'];
+        for (let line of lines.slice(0, 5)) {
+            if (titleKeywords.some(kw => line.toLowerCase().includes(kw)) && line.length < 50) {
+                result.role = line;
+                break;
+            }
+        }
+
+        // 2. Company Name Heuristics
+        const companyRegexes = [
+            /at\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
+            /about\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
+            /^([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})\s*[\-|·•]\s*(?:Job|Careers|Hiring|Opportunity)/i
+        ];
+        for (let line of lines.slice(0, 10)) {
+            for (let regex of companyRegexes) {
+                const match = line.match(regex);
+                if (match && match[1]) {
+                    result.company = match[1].trim();
+                    break;
+                }
+            }
+            if (result.company) break;
+        }
+        
+        if (!result.company && lines[0] && lines[0].includes(' - ')) {
+            const parts = lines[0].split(' - ');
+            if (parts[0] && parts[0].length < 30) {
+                result.company = parts[0].trim();
+            }
+        }
+
+        // 3. Salary Heuristics
+        const salaryRegex = /(?:[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?\s*[\-\–]\s*[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?|[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?\s*\/yr|[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?\s*annually)/gi;
+        const fullText = text.replace(/\n/g, ' ');
+        const match = fullText.match(salaryRegex);
+        if (match && match[0]) {
+            result.salary = match[0].trim();
+        }
+
+        return result;
     }
 };
 
