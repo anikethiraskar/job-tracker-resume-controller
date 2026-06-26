@@ -392,51 +392,111 @@ const TrackerController = {
         const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const result = {};
 
+        // Helper to clean common label prefixes
+        const cleanPrefix = (str, prefixes) => {
+            let cleaned = str;
+            for (let p of prefixes) {
+                const regex = new RegExp(`^${p}\\s*:\\s*`, 'i');
+                cleaned = cleaned.replace(regex, '');
+            }
+            return cleaned.trim();
+        };
+
+        const rolePrefixes = ['job title', 'role', 'position', 'title'];
+        const companyPrefixes = ['company', 'organization', 'employer', 'company name'];
+
         // 1. Role Title Heuristics (scan first 15 lines)
-        const titleKeywords = ['developer', 'engineer', 'analyst', 'manager', 'lead', 'architect', 'designer', 'intern', 'sde', 'programmer', 'specialist', 'consultant'];
+        const titleKeywords = ['developer', 'engineer', 'analyst', 'manager', 'lead', 'architect', 'designer', 'intern', 'sde', 'programmer', 'specialist', 'consultant', 'coder'];
         let titleIndex = -1;
         for (let i = 0; i < Math.min(lines.length, 15); i++) {
             const line = lines[i];
+            
+            // If the line explicitly starts with a prefix like "Job Title: ..."
+            const cleaned = cleanPrefix(line, rolePrefixes);
+            if (cleaned !== line && cleaned.length < 50) {
+                result.role = cleaned;
+                titleIndex = i;
+                break;
+            }
+
             if (titleKeywords.some(kw => line.toLowerCase().includes(kw)) && line.length < 50) {
-                result.role = line;
+                result.role = cleanPrefix(line, rolePrefixes);
                 titleIndex = i;
                 break;
             }
         }
 
         // 2. Company Name Heuristics
-        // Heuristic A: Look for "at [Company]" or "about [Company]" anywhere in the first 10 lines
-        const companyRegexes = [
-            /at\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
-            /about\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
-            /^([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})\s*[\-|·•]\s*(?:Job|Careers|Hiring|Opportunity)/i
-        ];
-        for (let i = 0; i < Math.min(lines.length, 10); i++) {
+        // Heuristic A: Look for explicit prefixes like "Company: Google"
+        for (let i = 0; i < Math.min(lines.length, 12); i++) {
             const line = lines[i];
-            for (let regex of companyRegexes) {
-                const match = line.match(regex);
-                if (match && match[1]) {
-                    result.company = match[1].trim();
+            const cleaned = cleanPrefix(line, companyPrefixes);
+            if (cleaned !== line && cleaned.length < 35) {
+                result.company = cleaned;
+                break;
+            }
+        }
+
+        // Heuristic B: Look for regex patterns ("at [Company]", "about [Company]")
+        if (!result.company) {
+            const companyRegexes = [
+                /at\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
+                /about\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
+                /^([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})\s*[\-|·•]\s*(?:Job|Careers|Hiring|Opportunity)/i
+            ];
+            for (let i = 0; i < Math.min(lines.length, 12); i++) {
+                const line = lines[i];
+                for (let regex of companyRegexes) {
+                    const match = line.match(regex);
+                    if (match && match[1]) {
+                        result.company = match[1].trim();
+                        break;
+                    }
+                }
+                if (result.company) break;
+            }
+        }
+
+        // Heuristic C: Check adjacent lines around the job title (up to 2 lines below)
+        if (!result.company && titleIndex !== -1) {
+            const candidates = [
+                lines[titleIndex + 1],
+                lines[titleIndex + 2],
+                lines[titleIndex - 1]
+            ].filter(Boolean);
+
+            for (let cand of candidates) {
+                cand = cleanPrefix(cand, companyPrefixes);
+                
+                // If it contains a dot, bullet, pipe, or dash (e.g. "Vianera · Pune")
+                if (/[·•\-\–\|]/.test(cand)) {
+                    const parts = cand.split(/[·•\-\–\|]/);
+                    const compPart = parts[0].trim();
+                    if (compPart.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time/i.test(compPart)) {
+                        result.company = compPart;
+                        break;
+                    }
+                }
+                
+                // If it contains a comma (e.g. "Vianera, Pune")
+                if (cand.includes(',')) {
+                    const parts = cand.split(',');
+                    const compPart = parts[0].trim();
+                    if (compPart.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time/i.test(compPart)) {
+                        result.company = compPart;
+                        break;
+                    }
+                }
+
+                // Normal check for single company name lines
+                if (cand.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time|\d+/i.test(cand)) {
+                    result.company = cand;
                     break;
                 }
             }
-            if (result.company) break;
         }
 
-        // Heuristic B: If title was found, check adjacent lines (above/below the title line)
-        if (!result.company && titleIndex !== -1) {
-            const nextLine = lines[titleIndex + 1];
-            if (nextLine && nextLine.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time|\d+/i.test(nextLine) && !nextLine.includes(',')) {
-                result.company = nextLine;
-            } else {
-                const prevLine = lines[titleIndex - 1];
-                if (prevLine && prevLine.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time|\d+/i.test(prevLine) && !prevLine.includes(',')) {
-                    result.company = prevLine;
-                }
-            }
-        }
-
-        // Heuristic C: Fallback check first line with split
+        // Heuristic D: If still nothing, look at the first line for splits
         if (!result.company && lines[0] && lines[0].includes(' - ')) {
             const parts = lines[0].split(' - ');
             if (parts[0] && parts[0].length < 30) {
@@ -444,12 +504,21 @@ const TrackerController = {
             }
         }
 
-        // 3. Salary Heuristics
-        const salaryRegex = /(?:[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?\s*[\-\–]\s*[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?|[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?\s*\/yr|[\$\£\€]\d{2,3}(?:\,\d{3})*(?:\s*k)?\s*annually)/gi;
+        // 3. Salary Heuristics (Support $, €, £, and Indian Rupee ₹)
+        const salaryRegex = /(?:[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?\s*[\-\–]\s*[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?|[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?\s*\/yr|[\$\£\€\₹]\d{1,3}(?:\,\d{3})*(?:\s*k)?\s*annually)/gi;
+        
+        // Support general Lakhs Per Annum (LPA) or Rupees ranges: e.g. "3,00,000 - 5,00,000" or "6 - 12 LPA"
+        const genericRangeRegex = /(\b\d{1,3}(?:\,\d{2,3})*(?:\s*k)?\s*[\-\–]\s*\d{1,3}(?:\,\d{2,3})*(?:\s*k)?\s*(?:INR|USD|Rs\.?|rupees|lpa|lakhs|annum|per year|/yr)\b)/i;
+
         const fullText = text.replace(/\n/g, ' ');
-        const match = fullText.match(salaryRegex);
+        let match = fullText.match(salaryRegex);
         if (match && match[0]) {
             result.salary = match[0].trim();
+        } else {
+            match = fullText.match(genericRangeRegex);
+            if (match && match[0]) {
+                result.salary = match[0].trim();
+            }
         }
 
         return result;
