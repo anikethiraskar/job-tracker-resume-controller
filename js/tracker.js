@@ -392,22 +392,27 @@ const TrackerController = {
         const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const result = {};
 
-        // 1. Role Title Heuristics
+        // 1. Role Title Heuristics (scan first 15 lines)
         const titleKeywords = ['developer', 'engineer', 'analyst', 'manager', 'lead', 'architect', 'designer', 'intern', 'sde', 'programmer', 'specialist', 'consultant'];
-        for (let line of lines.slice(0, 5)) {
+        let titleIndex = -1;
+        for (let i = 0; i < Math.min(lines.length, 15); i++) {
+            const line = lines[i];
             if (titleKeywords.some(kw => line.toLowerCase().includes(kw)) && line.length < 50) {
                 result.role = line;
+                titleIndex = i;
                 break;
             }
         }
 
         // 2. Company Name Heuristics
+        // Heuristic A: Look for "at [Company]" or "about [Company]" anywhere in the first 10 lines
         const companyRegexes = [
             /at\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
             /about\s+([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})(?:\s+|$)/,
             /^([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,30})\s*[\-|·•]\s*(?:Job|Careers|Hiring|Opportunity)/i
         ];
-        for (let line of lines.slice(0, 10)) {
+        for (let i = 0; i < Math.min(lines.length, 10); i++) {
+            const line = lines[i];
             for (let regex of companyRegexes) {
                 const match = line.match(regex);
                 if (match && match[1]) {
@@ -417,7 +422,21 @@ const TrackerController = {
             }
             if (result.company) break;
         }
-        
+
+        // Heuristic B: If title was found, check adjacent lines (above/below the title line)
+        if (!result.company && titleIndex !== -1) {
+            const nextLine = lines[titleIndex + 1];
+            if (nextLine && nextLine.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time|\d+/i.test(nextLine) && !nextLine.includes(',')) {
+                result.company = nextLine;
+            } else {
+                const prevLine = lines[titleIndex - 1];
+                if (prevLine && prevLine.length < 35 && !/remote|hybrid|onsite|contract|full-time|part-time|\d+/i.test(prevLine) && !prevLine.includes(',')) {
+                    result.company = prevLine;
+                }
+            }
+        }
+
+        // Heuristic C: Fallback check first line with split
         if (!result.company && lines[0] && lines[0].includes(' - ')) {
             const parts = lines[0].split(' - ');
             if (parts[0] && parts[0].length < 30) {
