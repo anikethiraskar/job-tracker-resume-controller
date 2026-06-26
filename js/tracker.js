@@ -496,7 +496,39 @@ const TrackerController = {
             }
         }
 
-        // Heuristic D: If still nothing, look at the first line for splits
+        // Heuristic D: Look for company description headers (like "Company Description" in user's text)
+        if (!result.company) {
+            const descHeaders = ['company description', 'about the company', 'about us', 'who we are', 'about the job'];
+            for (let i = 0; i < Math.min(lines.length, 15); i++) {
+                const line = lines[i].toLowerCase();
+                if (descHeaders.some(h => line.includes(h))) {
+                    for (let offset = 1; offset <= 2; offset++) {
+                        const nextLine = lines[i + offset];
+                        if (nextLine && nextLine.length < 45 && !nextLine.includes(':') && !/remote|hybrid|onsite/i.test(nextLine)) {
+                            if (/^[A-Z]/.test(nextLine)) {
+                                result.company = nextLine.replace(/\s+is\s+a\b.*/i, '').trim(); // Strip "is a..." suffix
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (result.company) break;
+            }
+        }
+
+        // Heuristic E: Look for "[Company Name] is a..." anywhere in the first 10 lines
+        if (!result.company) {
+            const isARegex = /^([A-Z][a-zA-Z0-9\s\.\,\-\&]{1,40})\s+is\s+(?:a|an|the|prominent|leading|global)\b/i;
+            for (let i = 0; i < Math.min(lines.length, 10); i++) {
+                const match = lines[i].match(isARegex);
+                if (match && match[1]) {
+                    result.company = match[1].trim();
+                    break;
+                }
+            }
+        }
+
+        // Heuristic F: If still nothing, look at the first line for splits
         if (!result.company && lines[0] && lines[0].includes(' - ')) {
             const parts = lines[0].split(' - ');
             if (parts[0] && parts[0].length < 30) {
