@@ -64,20 +64,108 @@ const ResumeController = {
         const file = e.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const content = event.target.result;
-            const editor = document.getElementById('resume-markdown-editor');
-            const commitMsgInput = document.getElementById('resume-commit-message');
+        const fileName = file.name;
+        const fileExtension = fileName.split('.').pop().toLowerCase();
+        
+        const editor = document.getElementById('resume-markdown-editor');
+        const commitMsgInput = document.getElementById('resume-commit-message');
+        
+        // Show loading status in the editor while parsing
+        editor.value = "Parsing file, please wait...";
+        this.updatePreview("### Parsing file, please wait...");
 
-            editor.value = content;
-            this.updatePreview(content);
-            commitMsgInput.value = `Uploaded: ${file.name}`;
-            
-            // Reset the file input so the same file can be uploaded again if needed
+        if (fileExtension === 'md' || fileExtension === 'txt') {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const content = event.target.result;
+                editor.value = content;
+                this.updatePreview(content);
+                commitMsgInput.value = `Uploaded: ${fileName}`;
+                e.target.value = '';
+            };
+            reader.readAsText(file);
+        } else if (fileExtension === 'docx') {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const arrayBuffer = event.target.result;
+                mammoth.convertToMarkdown({ arrayBuffer: arrayBuffer })
+                    .then((result) => {
+                        const content = result.value;
+                        editor.value = content;
+                        this.updatePreview(content);
+                        commitMsgInput.value = `Uploaded Word doc: ${fileName}`;
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        editor.value = "Error parsing DOCX file.";
+                        this.updatePreview("### Error parsing DOCX file.");
+                    })
+                    .finally(() => {
+                        e.target.value = '';
+                    });
+            };
+            reader.readAsArrayBuffer(file);
+        } else if (fileExtension === 'pdf') {
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                const arrayBuffer = event.target.result;
+                try {
+                    const content = await this.extractTextFromPDF(arrayBuffer);
+                    editor.value = content;
+                    this.updatePreview(content);
+                    commitMsgInput.value = `Uploaded PDF doc: ${fileName}`;
+                } catch (err) {
+                    console.error(err);
+                    editor.value = "Error parsing PDF file.";
+                    this.updatePreview("### Error parsing PDF file.");
+                } finally {
+                    e.target.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            alert('Unsupported file format. Please upload .md, .txt, .docx, or .pdf');
+            editor.value = "";
+            this.updatePreview("");
             e.target.value = '';
-        };
-        reader.readAsText(file);
+        }
+    },
+
+    async extractTextFromPDF(arrayBuffer) {
+        // Specify workerSrc for PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+        
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+        const pdf = await loadingTask.promise;
+        let fullText = '';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            
+            let lastY = null;
+            let pageText = '';
+            
+            for (let item of textContent.items) {
+                // Y coordinate is item.transform[5]
+                const currentY = item.transform[5];
+                
+                if (lastY === null) {
+                    pageText += item.str;
+                } else if (Math.abs(currentY - lastY) > 5) {
+                    // Line break
+                    pageText += '\n' + item.str;
+                } else {
+                    // Space-separated run on same line
+                    pageText += ' ' + item.str;
+                }
+                lastY = currentY;
+            }
+            
+            fullText += pageText + '\n\n';
+        }
+
+        return fullText.trim();
     },
 
     populateVersionSelects(resumes) {

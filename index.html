@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CareerHub - Job Application Tracker & Resume Controller</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- DOCX and PDF Parsers -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 </head>
 <body>
     <div id="app-layout">
@@ -265,7 +268,7 @@
                                     Markdown Editor
                                 </span>
                                 <div>
-                                    <input type="file" id="resume-file-upload" accept=".md,.txt" style="display:none">
+                                    <input type="file" id="resume-file-upload" accept=".md,.txt,.docx,.pdf" style="display:none">
                                     <button id="trigger-upload-btn" class="btn btn-secondary" style="padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:8px">
                                         <svg viewBox="0 0 24 24" style="width:14px; height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                                         Upload File
